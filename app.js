@@ -195,6 +195,7 @@ function toggleItem(id){const it=items.find(i=>i.id===id);if(it)it.checked=!it.c
 function changeQty(id,delta){const it=items.find(i=>i.id===id);if(!it)return;it.qty=Math.max(1,(it.qty||1)+delta);saveState();const el=document.querySelector(`.qty-num[data-id="${id}"]`);if(el)el.textContent=it.qty;}
 function uncheckAll(){items.forEach(i=>i.checked=false);saveState();render();showToast('List reset — ready for your next trip 🛒');}
 function moveItemToCat(itemId,catId){const it=items.find(i=>i.id===itemId);if(it){it.cat=catId;saveState();render();showToast(`Moved to ${getCat(catId)?.name}`);}}
+function clearAllItems(){if(!items.length)return;items=[];saveState();render();showToast('List cleared 🗑');}
 
 function highlightItem(id){
   const it=items.find(i=>i.id===id);if(!it)return;
@@ -281,7 +282,7 @@ function render(){
     return;
   }
   currentView==='flat'?renderFlat(container):renderGrouped(container);
-  attachSwipe();attachDrag();
+  attachSwipe();attachCheckTouch();attachDrag();attachTouchDrag();
 }
 
 // ── Grouped ───────────────────────────────────────────────────────────────
@@ -326,6 +327,7 @@ function renderGrouped(container){
   });
   // + Add Category button at bottom
   html+=`<button class="add-cat-btn" onclick="openAddCatModal()">＋ Add Category</button>`;
+  if(items.length>0){html+=`<button class="clear-list-btn" onclick="clearAllItems()">🗑 Clear List</button>`;}
   container.innerHTML=html||`<div class="empty-state"><div class="empty-icon">🛒</div><p>Your list is empty</p><small>Start typing above to add your first item</small></div>`;
 }
 
@@ -346,6 +348,7 @@ function renderFlat(container){
       ${done.map(it=>renderItemRow(it,true)).join('')}
     </div>`;
   }
+  if(items.length>0){html+=`<button class="clear-list-btn" onclick="clearAllItems()">🗑 Clear List</button>`;}
   container.innerHTML=html||`<div class="empty-state"><div class="empty-icon">🛒</div><p>Your list is empty</p><small>Start typing above to add your first item</small></div>`;
 }
 
@@ -356,6 +359,7 @@ function renderItemRow(it,showCatPill){
   return `<div class="list-item${it.checked?' checked':''}" data-item-id="${it.id}" data-id="${it.id}" draggable="true">
     <div class="item-del-bg" id="delbg_${it.id}">🗑 Delete</div>
     <div class="item-inner" id="inner_${it.id}">
+      <div class="drag-handle">⠿</div>
       <div class="item-check" onclick="toggleItem(${it.id})"><span class="check-mark">✓</span></div>
       <span class="item-emoji" data-id="${it.id}" onclick="openEmojiPicker(${it.id})" title="Tap to change emoji">${it.emoji}</span>
       <span class="item-name">${it.name}</span>
@@ -373,6 +377,54 @@ function renderItemRow(it,showCatPill){
 // ── Inline rename ─────────────────────────────────────────────────────────
 function startRename(catId,el){const cat=getCat(catId);if(!cat)return;const inp=document.createElement('input');inp.className='cat-name-input';inp.value=cat.name;inp.onclick=e=>e.stopPropagation();inp.onkeydown=e=>{if(e.key==='Enter')finishRename(catId,inp.value);if(e.key==='Escape')render();e.stopPropagation();};inp.onblur=()=>finishRename(catId,inp.value);el.parentNode.replaceChild(inp,el);inp.focus();inp.select();}
 function finishRename(catId,val){if(val.trim()){const c=getCat(catId);if(c){c.name=toTitleCase(val.trim());saveState();}}render();}
+
+// ── Touch drag (mobile category move) ────────────────────────────────────
+function attachTouchDrag(){
+  if(!window.matchMedia('(pointer:coarse)').matches)return;
+  let ghostEl=null,activeDragId=null,lastTouch=null;
+  document.querySelectorAll('.drag-handle').forEach(handle=>{
+    const itemEl=handle.closest('.list-item');
+    if(!itemEl)return;
+    const id=Number(itemEl.dataset.id);
+    handle.addEventListener('touchstart',e=>{
+      e.stopPropagation(); // prevent swipe-to-delete from setting sw=true
+      activeDragId=id;lastTouch=e.touches[0];
+      const it=items.find(i=>i.id===id);
+      ghostEl=document.createElement('div');ghostEl.className='drag-ghost';
+      ghostEl.innerHTML=`<span>${it?.emoji||'🛒'}</span><span>${it?.name||''}</span>`;
+      ghostEl.style.cssText=`top:${lastTouch.clientY-20}px;left:${lastTouch.clientX-20}px;`;
+      document.body.appendChild(ghostEl);
+      itemEl.classList.add('dragging');
+    },{passive:true});
+    handle.addEventListener('touchmove',e=>{
+      if(!activeDragId)return;
+      e.preventDefault(); // suppress page scroll; works because touch-action:none on handle
+      lastTouch=e.touches[0];
+      ghostEl.style.top=(lastTouch.clientY-20)+'px';
+      ghostEl.style.left=(lastTouch.clientX-20)+'px';
+      ghostEl.style.display='none';
+      const under=document.elementFromPoint(lastTouch.clientX,lastTouch.clientY);
+      ghostEl.style.display='';
+      const catSec=under?.closest('.cat-section');
+      document.querySelectorAll('.cat-section').forEach(s=>s.classList.remove('drag-over'));
+      if(catSec)catSec.classList.add('drag-over');
+    },{passive:false});
+    handle.addEventListener('touchend',()=>{
+      if(!activeDragId)return;
+      if(lastTouch){
+        ghostEl.style.display='none';
+        const under=document.elementFromPoint(lastTouch.clientX,lastTouch.clientY);
+        ghostEl.style.display='';
+        const catSec=under?.closest('.cat-section');
+        if(catSec){const catId=catSec.dataset.cat;const it=items.find(i=>i.id===activeDragId);if(it&&it.cat!==catId)moveItemToCat(activeDragId,catId);}
+      }
+      ghostEl.remove();ghostEl=null;
+      document.querySelectorAll('.cat-section').forEach(s=>s.classList.remove('drag-over'));
+      document.querySelectorAll('.list-item.dragging').forEach(el=>el.classList.remove('dragging'));
+      activeDragId=null;lastTouch=null;
+    });
+  });
+}
 
 // ── Drag & drop ───────────────────────────────────────────────────────────
 let dragId=null,dragGhost=null;
@@ -407,6 +459,20 @@ function attachSwipe(){
     el.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sw=true;},{passive:true});
     el.addEventListener('touchmove',e=>{if(!sw)return;cx=e.touches[0].clientX-sx;if(cx<0){inner.style.transform=`translateX(${Math.max(cx,-80)}px)`;delbg.classList.toggle('visible',cx<-30);}},{passive:true});
     el.addEventListener('touchend',()=>{if(cx<-60)deleteItem(id);else{inner.style.transform='';delbg.classList.remove('visible');}sw=false;cx=0;});
+  });
+}
+
+// ── Touch: immediate checkbox response ───────────────────────────────────
+function attachCheckTouch(){
+  if(!window.matchMedia('(pointer:coarse)').matches)return;
+  document.querySelectorAll('.item-check').forEach(el=>{
+    const id=Number(el.closest('.list-item')?.dataset.id);
+    if(!id)return;
+    el.addEventListener('touchend',e=>{
+      e.preventDefault();   // cancel synthetic click — prevents double-toggle
+      e.stopPropagation();  // prevent swipe touchend from also running
+      toggleItem(id);
+    },{passive:false});
   });
 }
 
