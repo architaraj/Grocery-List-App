@@ -213,38 +213,43 @@ let emojiTargetId = null;
 
 function openEmojiPicker(id) {
   emojiTargetId = id;
-  // Use a hidden input with emoji keyboard to capture emoji input
-  // Works natively on iOS (emoji keyboard) and desktop (system emoji picker or paste)
   const proxy = document.getElementById('emojiInputProxy');
+  const hint = document.getElementById('emojiHint');
   proxy.value = '';
-  proxy.style.cssText = 'position:fixed;bottom:50%;left:50%;opacity:0;width:40px;height:40px;font-size:24px;border:none;background:transparent;z-index:1000;';
-  proxy.focus();
-  // Show a brief toast hint
-  showToast('Type or paste an emoji for this item');
+  const isMobile = window.matchMedia('(pointer:coarse)').matches;
+  const ua = navigator.userAgent;
+  const isMac = /Mac/.test(navigator.platform||'') && !/iPhone|iPad/.test(ua);
+  if (isMobile) {
+    hint.textContent = 'Tap the 😊 key on your keyboard to switch to emoji';
+  } else if (isMac) {
+    hint.textContent = 'Press ⌘ + Ctrl + Space to open the emoji picker';
+  } else {
+    hint.textContent = 'Press Win + . to open the emoji picker';
+  }
+  document.getElementById('emojiPanel').classList.add('open');
+  setTimeout(() => proxy.focus(), 80);
+}
+
+function closeEmojiPanel() {
+  document.getElementById('emojiPanel').classList.remove('open');
+  emojiTargetId = null;
 }
 
 document.getElementById('emojiInputProxy').addEventListener('input', function(e) {
   const val = this.value;
   if (!val || !emojiTargetId) return;
-  // Extract first emoji character(s) — grab the first grapheme cluster that is emoji-like
   const emojiMatch = [...val].find(ch => ch.codePointAt(0) > 127);
   if (emojiMatch) {
     const it = items.find(i => i.id === emojiTargetId);
     if (it) {
       it.emoji = emojiMatch;
       saveState();
-      // Update just the emoji span without full re-render for smoothness
       const span = document.querySelector(`.item-emoji[data-id="${emojiTargetId}"]`);
       if (span) span.textContent = emojiMatch;
     }
+    this.value = '';
+    closeEmojiPanel();
   }
-  this.value = '';
-  this.style.cssText = 'position:fixed;opacity:0;width:1px;height:1px;pointer-events:none;';
-  emojiTargetId = null;
-});
-
-document.getElementById('emojiInputProxy').addEventListener('blur', function() {
-  this.style.cssText = 'position:fixed;opacity:0;width:1px;height:1px;pointer-events:none;';
 });
 
 // ── Category actions ──────────────────────────────────────────────────────

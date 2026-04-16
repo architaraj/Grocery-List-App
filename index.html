@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Pantry Party</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Reenie+Beanie&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -84,8 +85,15 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- Hidden file input for emoji via keyboard (mobile) -->
-<input type="text" id="emojiInputProxy" style="position:fixed;opacity:0;width:1px;height:1px;pointer-events:none;" inputmode="none">
+<!-- Emoji picker panel -->
+<div class="emoji-panel" id="emojiPanel">
+  <div class="emoji-panel-backdrop" onclick="closeEmojiPanel()"></div>
+  <div class="emoji-panel-card">
+    <div class="emoji-panel-title">Change Emoji <button class="modal-close" onclick="closeEmojiPanel()">×</button></div>
+    <input class="emoji-panel-input" id="emojiInputProxy" type="text" placeholder="😊" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <p class="emoji-panel-hint" id="emojiHint"></p>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>
